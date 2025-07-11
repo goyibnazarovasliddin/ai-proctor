@@ -1,0 +1,9 @@
+Flask==2.3.2              # Web server framework – front va backendni bog‘lash uchun ishlatiladi
+numpy==1.24.4             # Sonli hisob-kitoblar va arraylar bilan ishlash uchun
+opencv-python==4.9.0.80   # Video va rasm oqimini olish, rasm bilan ishlash uchun (OpenCV)
+pyaudio==0.2.13           # Mikrofon orqali audio signal olish uchun
+psycopg2==2.9.9           # PostgreSQL bilan ishlovchi Python kutubxonasi (bazaga yozish/oqish)
+webrtcvad==2.0.10         # WebRTC asosida real vaqtli gapirishni aniqlovchi modul
+deepface==0.40.1          # Yuzni tanish uchun tayyor model (VGG-Face, Facenet va h.k.)
+tensorflow==2.12.0        # Deep learning model ishlashi uchun zarur bo‘lgan asosiy framework
+tf-keras==2.12.0          # TensorFlow uchun Keras interfeysi – DeepFace modeli uchun muhim

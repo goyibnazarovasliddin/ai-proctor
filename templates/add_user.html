@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="uz">
+<head>
+  <meta charset="UTF-8">
+  <title>Yuz qo‘shish</title>
+  <style>
+    body { background: #002d22; color: white; font-family: Arial; display: flex; flex-direction: column; align-items: center; padding: 20px; }
+    label, input { font-size: 20px; margin: 10px; }
+    button { font-size: 22px; margin: 10px; padding: 10px 20px; cursor: pointer; }
+    #videoWrapper { margin-top: 20px; }
+    video { width: 480px; height: 360px; border: 2px solid white; }
+  </style>
+</head>
+<body>
+  <a href="/" style="color:lightblue; font-size:18px;">⬅ Asosiy sahifaga qaytish</a>
+  <h2>Yangi foydalanuvchi qo‘shish</h2>
+  <form id="userForm">
+    <label>Ism: <input type="text" id="firstName"></label>
+    <label>Familiya: <input type="text" id="lastName"></label>
+  </form>
+  <button id="startCamera" disabled>Kamerani yoqish</button>
+  <div id="videoWrapper" style="display:none;">
+    <video id="camera" autoplay></video>
+    <br>
+    <button id="captureBtn">📸 Rasmga olish va saqlash</button>
+  </div>
+
+  <script>
+    const firstName = document.getElementById('firstName');
+    const lastName = document.getElementById('lastName');
+    const startCamera = document.getElementById('startCamera');
+    const captureBtn = document.getElementById('captureBtn');
+    const videoWrapper = document.getElementById('videoWrapper');
+    const camera = document.getElementById('camera');
+    let stream;
+
+    firstName.addEventListener('input', toggleCameraButton);
+    lastName.addEventListener('input', toggleCameraButton);
+
+    function toggleCameraButton() {
+      startCamera.disabled = !(firstName.value.trim() && lastName.value.trim());
+    }
+
+    startCamera.onclick = async () => {
+      stream = await navigator.mediaDevices.getUserMedia({ video: true });
+      camera.srcObject = stream;
+      videoWrapper.style.display = 'block';
+    };
+
+    captureBtn.onclick = async () => {
+      const canvas = document.createElement('canvas');
+      canvas.width = camera.videoWidth;
+      canvas.height = camera.videoHeight;
+      canvas.getContext('2d').drawImage(camera, 0, 0);
+      const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg'));
+      const formData = new FormData();
+      formData.append('image', blob);
+      formData.append('name', `${firstName.value.trim()}_${lastName.value.trim()}`);
+      await fetch('/save_user', { method: 'POST', body: formData });
+      alert("Yuz muvaffaqiyatli saqlandi");
+      window.location.href = "/";
+    };
+  </script>
+</body>
+</html>

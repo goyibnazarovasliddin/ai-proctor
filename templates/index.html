@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="uz">
+<head>
+  <meta charset="UTF-8">
+  <title>AI Proctor</title>
+  <script defer src="/static/js/face-api.min.js"></script>
+  <style>
+    body {
+      background-color: #002d22;
+      color: #fff;
+      font-family: Arial, sans-serif;
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 100vh;
+      margin: 0;
+    }
+
+    h2 { font-size: 40px; }
+    #status { font-size: 30px; margin-bottom: 15px; }
+
+    #videoWrapper {
+      position: relative;
+      width: 640px;
+      height: 480px;
+    }
+
+    #videoElement, #overlay {
+      width: 100%;
+      height: 100%;
+      border: 2px solid #fff;
+      display: block;
+    }
+
+    #overlay {
+      position: absolute;
+      top: 0;
+      left: 0;
+      z-index: 10;
+      pointer-events: none;
+    }
+
+    .controls {
+      margin-top: 15px;
+    }
+
+    .btn {
+      padding: 10px 16px;
+      margin: 10px;
+      border: none;
+      cursor: pointer;
+      color: white;
+      font-weight: bold;
+      border-radius: 5px;
+      font-size: 20px;
+    }
+
+    .btn.on { background-color: #28a745; }
+    .btn.off { background-color: #dc3545; }
+  </style>
+</head>
+<body>
+  <a href="/add_user" style="position:absolute; top:20px; right:20px; background:#28a745; padding:10px 20px; color:white; border-radius:8px; text-decoration:none; font-weight:bold;">➕ Yuz qo‘shish</a>
+
+  <h2>Foydalanuvchi holati:</h2>
+  <div id="status">Kutilmoqda...</div>
+
+  <div id="videoWrapper">
+    <video id="videoElement" autoplay muted></video>
+    <canvas id="overlay"></canvas>
+  </div>
+
+  <div class="controls">
+    <button id="cameraBtn" class="btn on">Kamerani o‘chirish</button>
+    <button id="micBtn" class="btn on">Mikrofonni o‘chirish</button>
+  </div>
+
+  <script>
+    const video = document.getElementById('videoElement');
+    const canvas = document.getElementById('overlay');
+    const statusText = document.getElementById('status');
+    const cameraBtn = document.getElementById('cameraBtn');
+    const micBtn = document.getElementById('micBtn');
+
+    let stream;
+    let cameraOn = true;
+    let micOn = true;
+
+    async function initMedia() {
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+        video.srcObject = stream;
+
+        video.onloadedmetadata = async () => {
+          video.play();
+          await loadModels();
+          startFaceDetection();
+          updateStatus();
+        };
+
+        setInterval(sendStatusToServer, 3000);
+        setInterval(captureAndSendFrame, 5000);
+      } catch (err) {
+        statusText.innerText = "Kameraga yoki mikrofonga ulana olmadi";
+        console.error(err);
+      }
+    }
+
+    async function loadModels() {
+      await faceapi.nets.tinyFaceDetector.loadFromUri('/static/models');
+    }
+
+    async function startFaceDetection() {
+      const displaySize = { width: video.videoWidth, height: video.videoHeight };
+      canvas.width = displaySize.width;
+      canvas.height = displaySize.height;
+      faceapi.matchDimensions(canvas, displaySize);
+
+      setInterval(async () => {
+        const detections = await faceapi.detectAllFaces(
+          video,
+          new faceapi.TinyFaceDetectorOptions({
+            inputSize: 608,
+            scoreThreshold: 0.4
+          })
+        );
+        const resizedDetections = faceapi.resizeResults(detections, displaySize);
+        const ctx = canvas.getContext('2d');
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+        resizedDetections.forEach(d => {
+          const { x, y, width, height } = d.box;
+          ctx.beginPath();
+          ctx.lineWidth = 3;
+          ctx.strokeStyle = 'lime';
+          ctx.rect(x, y, width, height);
+          ctx.stroke();
+        });
+      }, 200);
+    }
+
+    function toggleCamera() {
+      cameraOn = !cameraOn;
+      stream.getVideoTracks()[0].enabled = cameraOn;
+      cameraBtn.innerText = cameraOn ? "Kamerani o‘chirish" : "Kamerani yoqish";
+      cameraBtn.className = 'btn ' + (cameraOn ? 'on' : 'off');
+      updateStatus();
+    }
+
+    function toggleMic() {
+      micOn = !micOn;
+      stream.getAudioTracks()[0].enabled = micOn;
+      micBtn.innerText = micOn ? "Mikrofonni o‘chirish" : "Mikrofonni yoqish";
+      micBtn.className = 'btn ' + (micOn ? 'on' : 'off');
+      updateStatus();
+    }
+
+    function updateStatus() {
+      if (cameraOn && micOn) {
+        statusText.innerText = "Gapiryapti va ko'rinmoqda - Noma'lum shaxs";
+      } else if (cameraOn) {
+        statusText.innerText = "Faqat ko'rinmoqda - Noma'lum shaxs";
+      } else if (micOn) {
+        statusText.innerText = "Faqat gapiryapti - Noma'lum shaxs";
+      } else {
+        statusText.innerText = "Harakat aniqlanmadi";
+      }
+    }
+
+    async function sendStatusToServer() {
+      try {
+        const res = await fetch('/status', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ camera_on: cameraOn, mic_on: micOn })
+        });
+        const data = await res.json();
+        statusText.innerText = data.status;
+      } catch (err) {
+        console.error("Status yuborishda xatolik:", err);
+      }
+    }
+
+    async function captureAndSendFrame() {
+      const canvasCapture = document.createElement('canvas');
+      canvasCapture.width = video.videoWidth;
+      canvasCapture.height = video.videoHeight;
+      canvasCapture.getContext('2d').drawImage(video, 0, 0);
+      const blob = await new Promise(resolve => canvasCapture.toBlob(resolve, 'image/jpeg'));
+
+      const formData = new FormData();
+      formData.append('frame', blob);
+      formData.append('camera_on', cameraOn);
+      formData.append('mic_on', micOn);
+
+      try {
+        const res = await fetch('/upload_face', {
+          method: 'POST',
+          body: formData
+        });
+        const data = await res.json();
+        statusText.innerText = data.status;
+      } catch (err) {
+        console.error("Yuzni aniqlashda xatolik:", err);
+      }
+    }
+
+
+    cameraBtn.addEventListener('click', toggleCamera);
+    micBtn.addEventListener('click', toggleMic);
+
+    initMedia();
+  </script>
+</body>
+</html>
